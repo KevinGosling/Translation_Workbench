@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Translation workbench — Select project</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; }
+label { margin-right: 10px; }
+select { padding: 4px; }
+</style>
+</head>
+<body>
+  <h1>Translation workbench</h1>
+  <p>Select a project to open the workbench:</p>
+
+  <label for="project-select">Project:</label>
+  <select id="project-select">
+    <option value="">-- Select a project --</option>
+    {% for project in projects %}
+    <option value="{{ project }}">{{ project }}</option>
+    {% endfor %}
+  </select>
+
+<script>
+document.getElementById('project-select').addEventListener('change', function() {
+    const p = this.value;
+    if (!p) return;
+    // navigate to the workbench for the selected project
+    window.location.href = '/workbench/' + encodeURIComponent(p);
+});
+</script>
+</body>
+</html>
