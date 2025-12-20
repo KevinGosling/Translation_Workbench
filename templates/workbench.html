@@ -259,6 +259,12 @@ function escapeHtml(text) {
     }[m]));
 }
 
+// New helper: capitalize only the first character
+function capitalizeFirst(text) {
+    if (!text) return text;
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function normalizeWord(word) {
     return (word || "")
         .normalize("NFD")
@@ -414,10 +420,16 @@ function renderReference(lemmas) {
 
         const meaningText = window.meanings[key] || "";
 
+        // Compute display variants: capitalize first letter for PROPN only (rendering only)
+        const displayLemma = (data.pos === 'PROPN') ? capitalizeFirst(data.lemma) : data.lemma;
+        const displayWordforms = (data.pos === 'PROPN')
+            ? data.wordforms.map(wf => capitalizeFirst(wf)).join(", ")
+            : data.wordforms.join(", ");
+
         div.innerHTML = `
-            <strong>${escapeHtml(data.lemma)}</strong>
+            <strong>${escapeHtml(displayLemma)}</strong>
             (${escapeHtml(data.pos)}) |
-            ${escapeHtml(data.wordforms.join(", "))} |
+            ${escapeHtml(displayWordforms)} |
             <span class="naob-edit" style="cursor:pointer;margin-right:4px;">▲</span>
             <a href="#"
                data-naob-url="${escapeHtml(finalUrl)}"
