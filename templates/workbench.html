@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Translation Workbench — {{ project }}</title>
+<style>
+/* --- Layout and spacing --- */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+#topbar {
+  background: #eee;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#main {
+  display: flex;
+  height: calc(100vh - 50px);
+  overflow: hidden;
+  max-width: 100vw;
+  padding: 0 20px;             /* Horizontal spacing */
+  box-sizing: border-box;
+}
+
+/* --- Sticky panel headers --- */
+.panel-header {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 10;
+  padding: 10px;               /* Header padding now lives here */
+  border-bottom: 1px solid #ddd;
+}
+
+.panel-header h2 {
+  margin: 0;
+}
+
+#lemma-search {
+  margin-top: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 0.9em;
+  box-sizing: border-box;
+}
+
+/* --- Editor and Reference Panels --- */
+#editor-panel,
+#reference-panel {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  flex-grow: 0;
+  overflow-y: auto;
+  padding: 0;                  /* ⛔ remove panel padding */
+}
+
+#editor-panel {
+  width: calc(50% - 2.5px - 20px);
+  background: #fff;
+  min-width: 100px;
+  overflow-x: hidden;
+}
+
+#reference-panel {
+  width: calc(50% - 2.5px - 20px);
+  background: #fff;
+  border-left: 1px solid #ccc;
+  box-sizing: border-box;
+}
+
+/* --- Scrollable content padding --- */
+#segments-container,
+#lemmas-container {
+  padding: 10px;               /* ✅ restores left/right padding */
+}
+
+/* --- Divider --- */
+#divider {
+  width: 5px;
+  cursor: col-resize;
+  background-color: #ccc;
+  flex: 0 0 auto;
+}
+
+/* --- Editor & Concordance Elements --- */
+.segment {
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+  border-bottom: none;
+}
+
+.segment.paragraph-break {
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 15px;
+}
+
+.source-preview {
+  margin-bottom: 5px;
+}
+
+.source {
+  background-color: #d4fcd4;
+  display: inline;
+  padding: 0 2px;
+}
+
+.target {
+  background-color: #fff2a3;
+  display: block;
+  padding: 0 2px;
+  margin-top: 2px;
+}
+
+.lemma-row {
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+/* --- Concordance table containment --- */
+.concordance {
+  display: block;
+  margin-top: 5px;
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.concordance table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.concordance th,
+.concordance td {
+  max-width: 100%;
+  word-break: break-word;
+  white-space: normal;
+}
+
+/* --- Misc --- */
+.bold-word {
+  font-weight: bold;
+}
+
+.source-word {
+  cursor: pointer;
+}
+
+.pos-select {
+  font-size: 0.8em;
+  margin-left: 2px;
+}
+
+.parse-btn {
+  background: #ccc;
+  border: none;
+  padding: 2px 5px;
+  cursor: pointer;
+  font-size: 0.8em;
+  margin-left: 5px;
+}
+
+/* --- Lemma meanings (NEW, AGREED) --- */
+.lemma-meaning {
+  display: inline-block;
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.lemma-meaning.expanded {
+  white-space: normal;
+}
+
+.naob-edit,
+.meaning-edit {
+  color: #bbb;      /* light grey */
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <label for="project-select">Project:</label>
+  <select id="project-select" aria-label="Current project">
+    <option value="{{ project }}">{{ project }}</option>
+  </select>
+  <a href="/" style="margin-left:10px;">Back to projects</a>
+</div>
+
+<div id="main">
+  {% include "components/editor_panel.html" %}
+  <div id="divider"></div>
+  {% include "components/reference_panel.html" %}
+</div>
+<script>
+// ---------- Layout slider ----------
+const divider = document.getElementById("divider");
+const leftPanel = document.getElementById("editor-panel");
+const rightPanel = document.getElementById("reference-panel");
+const container = leftPanel.parentNode;
+
+divider.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startLeftWidth = leftPanel.offsetWidth;
+    const startRightWidth = rightPanel.offsetWidth;
+
+    function onMouseMove(e) {
+        const dx = e.clientX - startX;
+        let newLeftWidth = startLeftWidth + dx;
+        let newRightWidth = startRightWidth - dx;
+
+        if (newLeftWidth < 100) {
+            newLeftWidth = 100;
+            newRightWidth = container.offsetWidth - newLeftWidth - divider.offsetWidth;
+        }
+        if (newRightWidth < 100) {
+            newRightWidth = 100;
+            newLeftWidth = container.offsetWidth - newRightWidth - divider.offsetWidth;
+        }
+
+        leftPanel.style.width = `${newLeftWidth}px`;
+        rightPanel.style.width = `${newRightWidth}px`;
+    }
+
+    function onMouseUp() {
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+    }
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+});
+
+// ---------- Global state ----------
+window.manualPOS = {};
+window.lemmaData = {};
+window.naobOverrides = {};
+window.meanings = {};
+
+// ---------- Helpers ----------
+function escapeHtml(text) {
+    return (text || "").replace(/[&<>"']/g, (m) => ({
+        '&':'&amp;',
+        '<':'&lt;',
+        '>':'&gt;',
+        '"':'&quot;',
+        "'":'&#039;'
+    }[m]));
+}
+
+function normalizeWord(word) {
+    return (word || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g,'')
+        .replace(/[^a-zA-ZåøæÅØÆ]/g,'')
+        .toLowerCase()
+        .trim();
+}
+
+// ---------- Reference panel partial refresh ----------
+function refreshReferencePanel() {
+    const currentProject = "{{ project }}";
+    fetch(`/project/${currentProject}`)
+        .then(res => res.json())
+        .then(data => {
+            window.lemmaData = data.lemmas || {};
+            window.naobOverrides = data.naob_overrides || {};
+            window.meanings = data.meanings || {};
+            renderReference(window.lemmaData);
+        });
+}
+
+// ---------- Editor rendering ----------
+function wrapWordsForPreview(segment) {
+    return segment.tokens.map((token, i) => {
+        const pos = token.pos === "PUNCT"
+            ? "PUNCT"
+            : (window.manualPOS[segment.id]?.[i] || token.pos);
+
+        return `<span class="source-word"
+                     data-lemma="${escapeHtml(token.lemma)}"
+                     data-pos="${pos}"
+                     data-index="${i}">
+                     ${escapeHtml(token.text)}
+                </span>`;
+    }).join(' ');
+}
+
+function renderEditor(segments) {
+    const container = document.getElementById("segments-container");
+    container.innerHTML = "";
+
+    for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        const segDiv = document.createElement("div");
+        segDiv.className = "segment";
+        segDiv.dataset.segmentId = seg.id;
+
+        if (seg.is_paragraph_end) segDiv.classList.add("paragraph-break");
+
+        segDiv.innerHTML = `
+            <div class="source-preview source">${wrapWordsForPreview(seg)}</div>
+            <button type="button" class="parse-btn">Parse</button>
+            <div class="source-parsed source" style="display:none;"></div>
+            <input class="target-segment"
+                   data-segment-id="${seg.id}"
+                   value="${escapeHtml(seg.target || "")}">
+        `;
+        container.appendChild(segDiv);
+    }
+
+    container.querySelectorAll(".parse-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            btn.blur(); // ✅ AGREED CHANGE: prevent scroll jump
+
+            const segDiv = btn.parentNode;
+            const parsedDiv = segDiv.querySelector(".source-parsed");
+            const previewDiv = segDiv.querySelector(".source-preview");
+            const segId = segDiv.dataset.segmentId;
+
+            const previewSpans = previewDiv.querySelectorAll(".source-word");
+            const tokens = Array.from(previewSpans).map(sp => ({
+                text: sp.innerText,
+                lemma: sp.dataset.lemma || normalizeWord(sp.innerText),
+                pos: sp.dataset.pos || "UNK"
+            }));
+
+            if (parsedDiv.style.display === "none") {
+                parsedDiv.innerHTML = tokens.map((token, i) => {
+                    const pos = token.pos === "PUNCT"
+                        ? "PUNCT"
+                        : (window.manualPOS[segId]?.[i] || token.pos);
+
+                    // ✅ AGREED CHANGE: suppress (PUNCT)
+                    const posTag = (pos === "PUNCT") ? "" : ` <span class="pos-tag">(${escapeHtml(pos)})</span>`;
+
+                    return `<span class="source-word"
+                                 data-lemma="${escapeHtml(token.lemma)}"
+                                 data-pos="${pos}"
+                                 data-index="${i}">
+                                 ${escapeHtml(token.text)}${posTag}
+                            </span>`;
+                }).join(' ');
+
+                parsedDiv.style.display = "block";
+                previewDiv.style.display = "none";
+
+                addEditorWordListeners();
+            } else {
+                parsedDiv.style.display = "none";
+                previewDiv.style.display = "inline";
+            }
+        });
+    });
+
+    const PROJECT_NAME = "{{ project }}";
+    const inputs = Array.from(document.querySelectorAll(".target-segment"));
+
+    inputs.forEach((input, idx) => {
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                const segmentId = input.dataset.segmentId;
+                const text = input.value;
+
+                fetch(`/project/${encodeURIComponent(PROJECT_NAME)}/update_segment`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ segment_id: segmentId, target_text: text })
+                }).then(res => {
+                    if (res.ok) {
+                        refreshReferencePanel();
+                        const nextInput = inputs[idx + 1];
+                        if (nextInput) {
+                            nextInput.focus();
+                            nextInput.select();
+                        }
+                    }
+                });
+            }
+        });
+    });
+
+    container.addEventListener("click", e => {
+        const span = e.target.closest(".source-word");
+        if (!span) return;
+        const lemmaKey = findLemmaKeyForWord(span.innerText);
+        if (lemmaKey) openLemmaAndScroll(lemmaKey);
+    });
+}
+
+// ---------- Reference rendering ----------
+function renderReference(lemmas) {
+    const container = document.getElementById("lemmas-container");
+    container.innerHTML = "";
+
+    Object.entries(lemmas).forEach(([key, data]) => {
+        const div = document.createElement("div");
+        div.className = "lemma-row";
+
+        const defaultUrl = `https://naob.no/ordbok/${encodeURIComponent(data.lemma)}`;
+        const finalUrl = window.naobOverrides[key] || defaultUrl;
+
+        const meaningText = window.meanings[key] || "";
+
+        div.innerHTML = `
+            <strong>${escapeHtml(data.lemma)}</strong>
+            (${escapeHtml(data.pos)}) |
+            ${escapeHtml(data.wordforms.join(", "))} |
+            <span class="naob-edit" style="cursor:pointer;margin-right:4px;">▲</span>
+            <a href="#"
+               data-naob-url="${escapeHtml(finalUrl)}"
+               onclick="window.open(this.dataset.naobUrl,'NAOB','width='+window.innerWidth/2+',height='+window.innerHeight);return false;">
+               NAOB
+            </a>
+            |
+            <span class="meaning-edit" style="cursor:pointer;margin-right:4px;">▲</span>
+            <span class="lemma-meaning" title="${escapeHtml(meaningText)}">${escapeHtml(meaningText)}</span>
+            <div class="concordance" id="concordance-${encodeURIComponent(key)}"></div>
+        `;
+
+        const editBtn = div.querySelector(".naob-edit");
+        editBtn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = window.naobOverrides[key] || "";
+            input.style.width = "90%";
+
+            editBtn.replaceWith(input);
+            input.focus();
+            input.select();
+
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveNaobOverride(key, input.value);
+                }
+                if (e.key === "Escape") {
+                    renderReference(window.lemmaData);
+                }
+            });
+
+            input.addEventListener("blur", () => {
+                renderReference(window.lemmaData);
+            });
+        });
+
+        const meaningEditBtn = div.querySelector(".meaning-edit");
+        const meaningSpan = div.querySelector(".lemma-meaning");
+
+        meaningEditBtn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+
+            const textarea = document.createElement("textarea");
+            textarea.value = window.meanings[key] || "";
+            textarea.style.width = "90%";
+            textarea.rows = 2;
+
+            meaningSpan.replaceWith(textarea);
+            textarea.focus();
+            textarea.select();
+
+            textarea.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveMeaning(key, textarea.value);
+                }
+                if (e.key === "Escape") {
+                    renderReference(window.lemmaData);
+                }
+            });
+
+            textarea.addEventListener("blur", () => {
+                renderReference(window.lemmaData);
+            });
+        });
+
+        if (meaningSpan) {
+            meaningSpan.addEventListener("mouseenter", () => {
+                meaningSpan.classList.add("expanded");
+            });
+            meaningSpan.addEventListener("mouseleave", () => {
+                meaningSpan.classList.remove("expanded");
+            });
+        }
+
+        div.addEventListener("click", (ev) => {
+            if (ev.target.tagName.toLowerCase() === "a") return;
+            if (ev.target.classList.contains("naob-edit")) return;
+            if (ev.target.classList.contains("meaning-edit")) return;
+            openLemmaAndScroll(key);
+        });
+
+        container.appendChild(div);
+    });
+}
+
+// ---------- Save NAOB override ----------
+function saveNaobOverride(lemmaKey, url) {
+    const project = "{{ project }}";
+
+    fetch(`/project/${project}/set_naob_override`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            lemma_key: lemmaKey,
+            url: url
+        })
+    }).then(res => {
+        if (res.ok) {
+            refreshReferencePanel();   // ✅ ONLY AGREED CHANGE
+        }
+    });
+}
+
+// ---------- Save meaning ----------
+function saveMeaning(lemmaKey, meaning) {
+    const project = "{{ project }}";
+
+    fetch(`/project/${project}/set_meaning`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            lemma_key: lemmaKey,
+            meaning: meaning
+        })
+    }).then(res => {
+        if (res.ok) {
+            refreshReferencePanel();
+        }
+    });
+}
+
+// ---------- Concordance ----------
+function toggleConcordance(key, occurrences) {
+    document.querySelectorAll(".concordance").forEach(div => {
+        if (div.id !== `concordance-${encodeURIComponent(key)}`) div.style.display = "none";
+    });
+
+    const concordanceDiv = document.getElementById(`concordance-${encodeURIComponent(key)}`);
+    if (!concordanceDiv) return;
+
+    if (concordanceDiv.style.display === "block") { 
+        concordanceDiv.style.display = "none"; 
+        return; 
+    }
+
+    concordanceDiv.innerHTML = "";
+    const table = document.createElement("table");
+    table.style.width = "100%";
+    table.style.tableLayout = "fixed";
+    table.border = "1";
+
+    const header = document.createElement("tr");
+    header.innerHTML = `
+        <th style="width: 50%;">Source</th>
+        <th style="width: 50%;">Target</th>
+    `;
+    table.appendChild(header);
+
+    const grouped = {};
+    occurrences.forEach(occ => {
+        if (!grouped[occ.source]) grouped[occ.source] = [];
+        grouped[occ.source].push(occ);
+    });
+
+    Object.keys(grouped).forEach(sourceText => {
+        const tr = document.createElement("tr");
+        const srcTd = document.createElement("td");
+        const tgtTd = document.createElement("td");
+        tgtTd.innerText = grouped[sourceText][0].target || "";
+
+        const words = sourceText.split(/\s+/).map(w => {
+            const lemmaKey = findLemmaKeyForWord(w) || key;
+            return `<span class="source-word"
+                         data-lemma="${escapeHtml(lemmaKey)}">
+                         ${escapeHtml(w)}
+                    </span>`;
+        }).join(' ');
+
+        srcTd.innerHTML = words;
+        tr.appendChild(srcTd);
+        tr.appendChild(tgtTd);
+        table.appendChild(tr);
+    });
+
+    concordanceDiv.appendChild(table);
+    concordanceDiv.style.display = "block";
+
+    concordanceDiv.addEventListener("click", function(ev) {
+        const span = ev.target.closest(".source-word");
+        if (!span) return;
+
+        const tempLemmaKey = span.dataset.lemma;
+        if (!tempLemmaKey || !window.lemmaData[tempLemmaKey]) return;
+
+        document.querySelectorAll(".concordance").forEach(div => div.style.display = "none");
+        setTimeout(() => { openLemmaAndScroll(tempLemmaKey); }, 0);
+    });
+}
+
+// ---------- Lemma lookup ----------
+function findLemmaKeyForWord(word) {
+    const normalized = normalizeWord(word);
+    for (let k of Object.keys(window.lemmaData || {})) {
+        const data = window.lemmaData[k];
+        if (!data) continue;
+        if (normalizeWord(data.lemma) === normalized) return k;
+        for (let wf of (data.wordforms || []))
+            if (normalizeWord(wf) === normalized) return k;
+    }
+    return null;
+}
+
+function findLemmaKeyByWordform(query) {
+    const normalized = normalizeWord(query);
+    if (!normalized) return null;
+
+    for (let [key, data] of Object.entries(window.lemmaData || {})) {
+        for (let wf of (data.wordforms || [])) {
+            if (normalizeWord(wf) === normalized) return key;
+        }
+    }
+    return null;
+}
+
+// ---------- Jump ----------
+function clearLemmaSearch() {
+    const input = document.getElementById("lemma-search");
+    if (input) input.value = "";
+}
+
+function openLemmaAndScroll(lemmaKey) {
+    clearLemmaSearch();
+    const data = window.lemmaData?.[lemmaKey];
+    if (!data) return;
+
+    toggleConcordance(lemmaKey, data.occurrences);
+
+    const lemmaRows = Array.from(document.querySelectorAll(".lemma-row"));
+    const lemmaDiv = lemmaRows.find(div => {
+        const strong = div.querySelector("strong");
+        return strong && normalizeWord(strong.innerText) === normalizeWord(data.lemma);
+    });
+
+    if (lemmaDiv) {
+        lemmaDiv.scrollIntoView({ behavior: "smooth", block: "center" });
+        lemmaDiv.style.backgroundColor = "#ffff99";
+        setTimeout(() => lemmaDiv.style.backgroundColor = "", 800);
+    }
+}
+
+// ---------- Reference search ----------
+function setupLemmaSearch() {
+    const searchInput = document.getElementById("lemma-search");
+    if (!searchInput || searchInput.dataset.bound) return;
+    searchInput.dataset.bound = "1";
+
+    searchInput.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+
+        const lemmaKey = findLemmaKeyByWordform(searchInput.value);
+        if (!lemmaKey) {
+            searchInput.style.backgroundColor = "#ffd6d6";
+            setTimeout(() => searchInput.style.backgroundColor = "", 400);
+            return;
+        }
+
+        openLemmaAndScroll(lemmaKey);
+    });
+
+    searchInput.addEventListener("dblclick", () => {
+        const lemmaKey = findLemmaKeyByWordform(searchInput.value);
+        if (lemmaKey) openLemmaAndScroll(lemmaKey);
+    });
+}
+
+// ---------- Autosuggestions ----------
+function updateLemmaSearchSuggestions(prefix) {
+    const datalist = document.getElementById("lemma-wordform-list");
+    if (!datalist) return;
+
+    datalist.innerHTML = "";
+
+    const normalizedPrefix = normalizeWord(prefix);
+    if (normalizedPrefix.length < 3) return;
+
+    const seen = new Set();
+
+    for (const data of Object.values(window.lemmaData || {})) {
+        for (const wf of (data.wordforms || [])) {
+            const norm = normalizeWord(wf);
+            if (!norm.startsWith(normalizedPrefix)) continue;
+            if (seen.has(norm)) continue;
+            seen.add(norm);
+
+            const option = document.createElement("option");
+            option.value = wf;
+            datalist.appendChild(option);
+        }
+    }
+}
+
+function setupLemmaSearchSuggestions() {
+    const input = document.getElementById("lemma-search");
+    if (!input || input.dataset.suggestBound) return;
+    input.dataset.suggestBound = "1";
+
+    input.addEventListener("input", () => {
+        updateLemmaSearchSuggestions(input.value);
+    });
+}
+
+function addEditorWordListeners() {}
+
+// ---------- Init ----------
+(function init() {
+    const currentProject = "{{ project }}";
+    if (currentProject) {
+        fetch(`/project/${currentProject}`)
+            .then(res => res.json())
+            .then(data => {
+                window.lemmaData = data.lemmas || {};
+                window.naobOverrides = data.naob_overrides || {};
+                window.meanings = data.meanings || {};
+                renderEditor(data.segments || []);
+                renderReference(window.lemmaData);
+                setupLemmaSearch();
+                setupLemmaSearchSuggestions();
+            });
+    } else {
+        setupLemmaSearch();
+        setupLemmaSearchSuggestions();
+    }
+})();
+</script>
+</body>
+</html>
