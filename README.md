@@ -1,4 +1,4 @@
-# Translation Workbench
+# Bokmål translation workbench
 
 A desktop application for translating Norwegian texts to English with integrated concordance tools, lemmatization, and workflow management.
 
