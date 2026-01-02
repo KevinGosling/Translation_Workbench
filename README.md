@@ -1,6 +1,6 @@
 # Translation Workbench
 
-A desktop application for translating Norwegian novels to English with integrated concordance tools, lemmatization, and workflow management.
+A desktop application for translating Norwegian texts to English with integrated concordance tools, lemmatization, and workflow management.
 
 ## Overview
 
