@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ project }}</title>
+<!-- Version 1.12 - Added file statistics table with export functionality -->
+<style>
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+#topbar {
+  background: #eee;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#main {
+  display: flex;
+  height: calc(100vh - 50px);
+  overflow: hidden;
+  max-width: 100vw;
+  padding: 0 20px;
+  box-sizing: border-box;
+}
+
+#left-panel {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+#concordance-manager {
+  width: 400px;
+  background: #fff;
+  border-left: 1px solid #ccc;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* V1.1: Build concordances section */
+#build-section {
+  background: #f0f0f0;
+  padding: 15px;
+  margin-bottom: 20px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+#build-controls {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 10px;
+}
+
+#build-concordances-btn {
+  padding: 10px 20px;
+  font-size: 1.1em;
+  cursor: pointer;
+  background: #53557C;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+
+#build-concordances-btn:hover {
+  background: #A4A4BC;
+}
+
+#build-concordances-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+#concordance-status {
+  font-weight: bold;
+}
+
+#concordance-stats {
+  color: #666;
+  font-size: 0.9em;
+}
+
+#build-progress {
+  display: none;
+}
+
+#build-progress-bar {
+  width: 100%;
+  background: #ddd;
+  height: 20px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#build-progress-fill {
+  width: 0%;
+  background: #4CAF50;
+  height: 100%;
+  transition: width 0.3s;
+}
+
+/* V1.8: Debug console */
+.debug-console {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8em;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  display: none;
+}
+
+.debug-console.visible {
+  display: block;
+}
+
+.debug-line {
+  margin: 2px 0;
+  word-break: break-all;
+}
+
+.debug-line.error {
+  color: #f48771;
+}
+
+.debug-line.success {
+  color: #89d185;
+}
+
+.debug-line.info {
+  color: #4fc1ff;
+}
+
+.pos-group {
+  margin-bottom: 20px;
+}
+
+.pos-header {
+  font-weight: bold;
+  font-size: 1.1em;
+  cursor: pointer;
+  padding: 5px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  margin-bottom: 5px;
+}
+
+.pos-header:hover {
+  background: #e8e8e8;
+}
+
+.pos-content {
+  padding-left: 20px;
+  display: none;
+}
+
+.pos-content.expanded {
+  display: block;
+}
+
+.lemma-item {
+  padding: 3px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lemma-item input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.frequency {
+  color: #666;
+  font-size: 0.9em;
+  margin-left: auto;
+}
+
+.suppress-all {
+  margin-left: 10px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+/* V1.12: File statistics table */
+.file-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.file-stats-table th,
+.file-stats-table td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+.file-stats-table th {
+  background-color: #f5f5f5;
+  font-weight: bold;
+}
+
+.file-stats-table tr:hover {
+  background-color: #f9f9f9;
+}
+
+.export-btn {
+  padding: 5px 10px;
+  background: #53557C;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.export-btn:hover {
+  background: #A4A4BC;
+}
+
+.export-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Checkbox styling */
+input[type="checkbox"] {
+  accent-color: #53557C;  /* Modern browsers */
+}
+
+/* Radio button styling */
+input[type="radio"] {
+  accent-color: #53557C;  /* Modern browsers */
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <label for="project-select">Project:</label>
+  <select id="project-select" aria-label="Current project">
+    <option value="{{ project }}">{{ project }}</option>
+  </select>
+  <a href="/workbench/{{ project }}" style="margin-left:10px;">Workbench</a>
+  <a href="/" style="margin-left:10px;">Projects</a>
+  <label style="margin-left: auto;">
+    <input type="checkbox" id="debug-toggle"> Show Debug Console
+  </label>
+</div>
+
+<div id="main">
+  <div id="left-panel">
+    <h1>{{ project }}</h1>
+    
+    <!-- V1.1: Default view preference -->
+    <div style="background: #f5f5f5; padding: 15px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 4px;">
+      <label style="display: block; margin-bottom: 8px;">
+        <input type="radio" name="default-view" value="dashboard" id="default-dashboard" checked>
+        Load to dashboard
+      </label>
+      <label style="display: block;">
+        <input type="radio" name="default-view" value="workbench" id="default-workbench">
+        Load to workbench
+      </label>
+    </div>
+    
+    <!-- V1.12: File statistics table -->
+    <div style="background: #f5f5f5; padding: 15px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 4px;">
+        <table class="file-stats-table" id="file-stats-table">
+        <thead>
+          <tr>
+            <th>Source file</th>
+            <th>Words</th>
+            <th>Segments</th>
+            <th>Translated</th>
+            <th>% done</th>
+            <th>Export</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="6" style="text-align: center; color: #666;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    
+    </div>
+  
+  <div id="concordance-manager">
+    <h2>Concordance manager</h2>
+    <p>Process source files, suppress common words, then build concordances for the workbench.</p>
+    
+    <!-- V1.3: Initial frequency extraction section -->
+    <div id="extract-section" style="background: #f9f9f9; padding: 15px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 4px; display: none;">
+       <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+        <button id="extract-frequencies-btn" style="padding: 10px 20px; font-size: 1.1em; cursor: pointer; background: #53557C; color: white; border: none; border-radius: 4px;">
+          Extract frequencies
+        </button>
+        <button id="re-extract-frequencies-btn" style="padding: 10px 20px; font-size: 0.9em; cursor: pointer; background: #ff9800; color: white; border: none; border-radius: 4px; display: none;">
+          Force re-extract
+        </button>
+        <div>
+          <div id="extract-status">Not processed</div>
+          <div id="extract-stats"></div>
+        </div>
+      </div>
+      <div id="extract-progress" style="display: none;">
+        <div style="width: 100%; background: #ddd; height: 20px; border-radius: 10px; overflow: hidden;">
+          <div id="extract-progress-fill" style="width: 0%; background: #53557C; height: 100%; transition: width 0.3s;"></div>
+        </div>
+      </div>
+      <div id="extract-debug" class="debug-console"></div>
+    </div>
+    
+    <!-- V1.1: Build concordances section -->
+    <div id="build-section">
+      <div id="build-controls">
+        <button id="build-concordances-btn">Build concordance</button>
+        <div>
+          <div id="concordance-status">Checking status...</div>
+          <div id="concordance-stats"></div>
+        </div>
+      </div>
+      <div id="build-progress">
+        <div id="build-progress-bar">
+          <div id="build-progress-fill"></div>
+        </div>
+      </div>
+      <div id="build-debug" class="debug-console"></div>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+      <label>
+        <input type="radio" name="view-mode" value="grouped" id="view-grouped" checked>
+        Group by POS
+      </label>
+      <label style="margin-left: 15px;">
+        <input type="radio" name="view-mode" value="ungrouped" id="view-ungrouped">
+        Show all (by frequency)
+      </label>
+    </div>
+    <div id="pos-groups-container">Loading...</div>
+  </div>
+</div>
+
+<script>
+const PROJECT_NAME = "{{ project }}";
+let posGroupsData = {};
+let suppressions = {pos: [], lemmas: []};
+let viewMode = "grouped";
+
+// V1.8: Debug console helpers
+function addDebugLine(containerId, message, type = 'info') {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  
+  const line = document.createElement('div');
+  line.className = `debug-line ${type}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  container.appendChild(line);
+  container.scrollTop = container.scrollHeight;
+}
+
+// Toggle debug console visibility
+document.getElementById('debug-toggle').addEventListener('change', (e) => {
+  const debugConsoles = document.querySelectorAll('.debug-console');
+  debugConsoles.forEach(console => {
+    if (e.target.checked) {
+      console.classList.add('visible');
+    } else {
+      console.classList.remove('visible');
+    }
+  });
+});
+
+// V1.12: Load file statistics
+function loadFileStatistics() {
+  fetch(`/project/${PROJECT_NAME}/file_statistics`)
+    .then(res => res.json())
+    .then(data => {
+      const tbody = document.querySelector('#file-stats-table tbody');
+      tbody.innerHTML = '';
+      
+      data.files.forEach(file => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${file.filename}</td>
+          <td>${file.word_count}</td>
+          <td>${file.total_segments}</td>
+          <td>${file.translated_segments}</td>
+          <td>${file.percent_translated}%</td>
+          <td><button class="export-btn" data-filename="${file.filename}">Export</button></td>
+        `;
+        tbody.appendChild(row);
+      });
+      
+      // Add export button handlers
+      document.querySelectorAll('.export-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const filename = btn.dataset.filename;
+          exportFile(filename, btn);
+        });
+      });
+    })
+    .catch(err => {
+      console.error('Error loading file statistics:', err);
+      const tbody = document.querySelector('#file-stats-table tbody');
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #f44336;">Error loading statistics</td></tr>';
+    });
+}
+
+// V1.12: Export file to DOCX
+function exportFile(filename, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Exporting...';
+  
+  fetch(`/project/${PROJECT_NAME}/export_file/${encodeURIComponent(filename)}`, {
+    method: 'POST'
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        btn.textContent = '✓ Exported';
+        btn.style.background = '#45a049';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = 'Export';
+          btn.style.background = '#4CAF50';
+        }, 2000);
+      } else {
+        throw new Error(data.error || 'Export failed');
+      }
+    })
+    .catch(err => {
+      console.error('Export error:', err);
+      btn.textContent = '✗ Failed';
+      btn.style.background = '#f44336';
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = 'Export';
+        btn.style.background = '#4CAF50';
+      }, 2000);
+    });
+}
+
+// Load file statistics on page load
+loadFileStatistics();
+
+// V1.3: Check if frequencies need to be extracted
+fetch(`/project/${PROJECT_NAME}/concordance_status`)
+  .then(res => res.json())
+  .then(data => {
+    const extractSection = document.getElementById('extract-section');
+    const extractBtn = document.getElementById('extract-frequencies-btn');
+    const reExtractBtn = document.getElementById('re-extract-frequencies-btn');
+    
+    if (!data.has_master) {
+      // Show frequency extraction section - needs to be done
+      extractSection.style.display = 'block';
+      extractBtn.style.display = 'inline-block';
+      reExtractBtn.style.display = 'none';
+      // V1.7: Don't load frequencies yet - they don't exist!
+      document.getElementById('pos-groups-container').innerHTML = '<p style="padding: 20px;">Please extract frequencies first.</p>';
+    } else {
+      // Already extracted - show re-extract option
+      extractSection.style.display = 'block';
+      extractBtn.style.display = 'none';
+      reExtractBtn.style.display = 'inline-block';
+      document.getElementById('extract-status').textContent = 'Already extracted';
+      document.getElementById('extract-stats').textContent = 'Use "Force Re-extract" to see progress';
+      // V1.7: Load frequencies since they exist
+      loadFrequencies();
+    }
+  });
+
+// V1.8: Extract frequencies button handler with enhanced debugging
+function extractFrequenciesHandler(force = false) {
+  const btn = force ? document.getElementById('re-extract-frequencies-btn') : document.getElementById('extract-frequencies-btn');
+  const statusDiv = document.getElementById('extract-status');
+  const statsDiv = document.getElementById('extract-stats');
+  const progress = document.getElementById('extract-progress');
+  const progressFill = document.getElementById('extract-progress-fill');
+  const debugConsole = document.getElementById('extract-debug');
+  
+  // Clear debug console
+  debugConsole.innerHTML = '';
+  
+  btn.disabled = true;
+  btn.textContent = 'Extracting...';
+  statusDiv.textContent = 'Starting...';
+  statsDiv.textContent = '';
+  progress.style.display = 'block';
+  progressFill.style.width = '0%';
+  
+  const url = force 
+    ? `/project/${PROJECT_NAME}/extract_frequencies_stream?force=true`
+    : `/project/${PROJECT_NAME}/extract_frequencies_stream`;
+  
+  addDebugLine('extract-debug', `Opening SSE connection to: ${url}`, 'info');
+  
+  const eventSource = new EventSource(url);
+  
+  eventSource.onopen = function() {
+    addDebugLine('extract-debug', 'SSE connection established', 'success');
+  };
+  
+  eventSource.onmessage = function(event) {
+    addDebugLine('extract-debug', `Received: ${event.data.substring(0, 100)}...`, 'info');
+    
+    try {
+      const data = JSON.parse(event.data);
+      addDebugLine('extract-debug', `Parsed status: ${data.status || 'progress'}`, 'info');
+      
+      if (data.status === 'started') {
+        addDebugLine('extract-debug', `Total segments: ${data.total_segments}`, 'info');
+        statusDiv.textContent = 'Processing files...';
+      } else if (data.status === 'complete') {
+        eventSource.close();
+        addDebugLine('extract-debug', 'Extraction complete!', 'success');
+        progressFill.style.width = '100%';
+        
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '✓ Complete';
+          statusDiv.textContent = 'Frequencies extracted';
+          statusDiv.style.color = '#4CAF50';
+          progress.style.display = 'none';
+          document.getElementById('extract-section').style.display = 'none';
+          
+          // Reload frequency data and file statistics
+          loadFrequencies();
+          loadFileStatistics();
+        }, 500);
+      } else if (data.status === 'error') {
+        eventSource.close();
+        addDebugLine('extract-debug', `Error: ${data.error}`, 'error');
+        if (data.traceback) {
+          addDebugLine('extract-debug', data.traceback, 'error');
+        }
+        btn.disabled = false;
+        btn.textContent = force ? 'Force Re-extract' : 'Extract Frequencies';
+        statusDiv.textContent = '✗ Failed';
+        statusDiv.style.color = '#f44336';
+        statsDiv.textContent = data.error || 'Unknown error';
+        progress.style.display = 'none';
+      } else {
+        // Progress update
+        progressFill.style.width = data.percent + '%';
+        if (data.file) {
+          addDebugLine('extract-debug', `File ${data.current}/${data.total}: ${data.file}`, 'info');
+          statusDiv.textContent = `Processing: ${data.file}`;
+          statsDiv.textContent = `${data.current}/${data.total} files (${data.percent}%)`;
+        } else {
+          statusDiv.textContent = data.message || 'Processing...';
+          statsDiv.textContent = `${data.percent}%`;
+        }
+      }
+    } catch (err) {
+      addDebugLine('extract-debug', `Parse error: ${err.message}`, 'error');
+    }
+  };
+  
+  eventSource.onerror = function(err) {
+    addDebugLine('extract-debug', `Connection error: ${err.type}`, 'error');
+    eventSource.close();
+    btn.disabled = false;
+    btn.textContent = force ? 'Force Re-extract' : 'Extract Frequencies';
+    statusDiv.textContent = '✗ Failed';
+    statusDiv.style.color = '#f44336';
+    statsDiv.textContent = 'Connection error - check browser console';
+    progress.style.display = 'none';
+    console.error('SSE error:', err);
+  };
+}
+
+document.getElementById('extract-frequencies-btn').addEventListener('click', () => extractFrequenciesHandler(false));
+document.getElementById('re-extract-frequencies-btn').addEventListener('click', () => extractFrequenciesHandler(true));
+
+// V1.1: Load user preferences
+fetch(`/project/${PROJECT_NAME}/preferences`)
+  .then(res => res.json())
+  .then(prefs => {
+    const defaultView = prefs.default_view || "dashboard";
+    if (defaultView === "workbench") {
+      document.getElementById('default-workbench').checked = true;
+    } else {
+      document.getElementById('default-dashboard').checked = true;
+    }
+  });
+
+// V1.1: Save default view preference when changed
+document.querySelectorAll('input[name="default-view"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    const value = e.target.value;
+    fetch(`/project/${PROJECT_NAME}/preferences`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'default_view', value: value })
+    })
+    .then(res => res.json())
+    .then(data => {
+      console.log('Default view preference saved:', value);
+    })
+    .catch(err => {
+      console.error('Error saving preference:', err);
+    });
+  });
+});
+
+// V1.1: Check concordance build status on load
+function checkConcordanceStatus() {
+  fetch(`/project/${PROJECT_NAME}/concordance_status`)
+    .then(res => res.json())
+    .then(data => {
+      const statusDiv = document.getElementById('concordance-status');
+      const statsDiv = document.getElementById('concordance-stats');
+      const btn = document.getElementById('build-concordances-btn');
+      
+      if (data.built) {
+        statusDiv.textContent = `Built: ${timeAgo(data.timestamp)}`;
+        statsDiv.textContent = `${data.with_concordances} of ${data.total_lemmas} lemmas have concordances`;
+        btn.textContent = 'Rebuild concordances';
+      } else if (data.has_master) {
+        statusDiv.textContent = 'Not built yet';
+        statsDiv.textContent = 'Frequencies loaded, ready to build';
+        btn.textContent = 'Build concordances';
+      } else {
+        statusDiv.textContent = 'Not initialized';
+        statsDiv.textContent = 'Load project in workbench first';
+        btn.textContent = 'Build concordances';
+      }
+    })
+    .catch(err => {
+      console.error('Status check error:', err);
+      document.getElementById('concordance-status').textContent = 'Error checking status';
+    });
+}
+
+// V1.1: Time ago helper
+function timeAgo(isoString) {
+  const date = new Date(isoString);
+  const seconds = Math.floor((new Date() - date) / 1000);
+  
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`;
+  return `${Math.floor(seconds / 86400)} days ago`;
+}
+
+// V1.8: Build concordances button handler with enhanced debugging
+document.getElementById('build-concordances-btn').addEventListener('click', () => {
+  const btn = document.getElementById('build-concordances-btn');
+  const statusDiv = document.getElementById('concordance-status');
+  const statsDiv = document.getElementById('concordance-stats');
+  const progress = document.getElementById('build-progress');
+  const progressFill = document.getElementById('build-progress-fill');
+  const debugConsole = document.getElementById('build-debug');
+  
+  // Clear debug console
+  debugConsole.innerHTML = '';
+  
+  btn.disabled = true;
+  btn.textContent = 'Building...';
+  statusDiv.textContent = 'Starting...';
+  statsDiv.textContent = '';
+  progress.style.display = 'block';
+  progressFill.style.width = '0%';
+  
+  const url = `/project/${PROJECT_NAME}/build_concordances_stream`;
+  addDebugLine('build-debug', `Opening SSE connection to: ${url}`, 'info');
+  
+  // Use EventSource for Server-Sent Events
+  const eventSource = new EventSource(url);
+  
+  eventSource.onopen = function() {
+    addDebugLine('build-debug', 'SSE connection established', 'success');
+  };
+  
+  eventSource.onmessage = function(event) {
+    addDebugLine('build-debug', `Received: ${event.data.substring(0, 100)}...`, 'info');
+    
+    try {
+      const data = JSON.parse(event.data);
+      addDebugLine('build-debug', `Parsed status: ${data.status || 'progress'}`, 'info');
+      
+      if (data.status === 'started') {
+        addDebugLine('build-debug', `Total segments: ${data.total_segments}`, 'info');
+        statusDiv.textContent = 'Building concordances...';
+      } else if (data.status === 'complete') {
+        // Build complete
+        eventSource.close();
+        addDebugLine('build-debug', 'Build complete!', 'success');
+        progressFill.style.width = '100%';
+        
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = 'Rebuild Concordances';
+          statusDiv.textContent = '✓ Built just now';
+          statusDiv.style.color = '#4CAF50';
+          statsDiv.textContent = `${data.with_concordances} of ${data.total_lemmas} lemmas have concordances`;
+          progress.style.display = 'none';
+          
+          setTimeout(() => {
+            statusDiv.style.color = '';
+          }, 3000);
+        }, 500);
+      } else if (data.status === 'error') {
+        // Error occurred
+        eventSource.close();
+        addDebugLine('build-debug', `Error: ${data.error}`, 'error');
+        if (data.traceback) {
+          addDebugLine('build-debug', data.traceback, 'error');
+        }
+        btn.disabled = false;
+        btn.textContent = 'Build Concordances';
+        statusDiv.textContent = '✗ Build failed';
+        statusDiv.style.color = '#f44336';
+        statsDiv.textContent = data.error || 'Unknown error';
+        progress.style.display = 'none';
+      } else {
+        // Progress update
+        progressFill.style.width = data.percent + '%';
+        addDebugLine('build-debug', `Progress: ${data.current}/${data.total} (${data.percent}%)`, 'info');
+        statusDiv.textContent = data.message || 'Processing...';
+        statsDiv.textContent = `${data.percent}% complete`;
+      }
+    } catch (err) {
+      addDebugLine('build-debug', `Parse error: ${err.message}`, 'error');
+    }
+  };
+  
+  eventSource.onerror = function(err) {
+    addDebugLine('build-debug', `Connection error: ${err.type}`, 'error');
+    eventSource.close();
+    btn.disabled = false;
+    btn.textContent = 'Build Concordances';
+    statusDiv.textContent = '✗ Build failed';
+    statusDiv.style.color = '#f44336';
+    statsDiv.textContent = 'Connection error - check browser console';
+    progress.style.display = 'none';
+    console.error('SSE error:', err);
+  };
+});
+
+// Load lemma frequencies
+function loadFrequencies() {
+  fetch(`/project/${PROJECT_NAME}/lemma_frequencies`)
+    .then(res => {
+      if (!res.ok) {
+        // Master cache doesn't exist yet
+        document.getElementById('pos-groups-container').innerHTML = 
+          '<p style="padding: 20px; color: #666;">Please extract frequencies first using the button above.</p>';
+        return null;
+      }
+      return res.json();
+    })
+    .then(data => {
+      if (!data) return;
+      
+      posGroupsData = data.pos_groups;
+      suppressions = data.suppressions || {pos: [], lemmas: []};
+      renderView();
+      
+      // V1.1: Check concordance status after loading frequencies
+      checkConcordanceStatus();
+    })
+    .catch(err => {
+      console.error('Error loading frequencies:', err);
+      document.getElementById('pos-groups-container').innerHTML = 
+        '<p style="padding: 20px; color: #f44336;">Error loading frequencies. Please try extracting again.</p>';
+    });
+}
+
+// V1.7: Try to load frequencies (will show message if not extracted yet)
+loadFrequencies();
+
+// View mode toggle
+document.getElementById("view-grouped").addEventListener("change", () => {
+  viewMode = "grouped";
+  renderView();
+});
+
+document.getElementById("view-ungrouped").addEventListener("change", () => {
+  viewMode = "ungrouped";
+  renderView();
+});
+
+function saveSuppressions() {
+  fetch(`/project/${PROJECT_NAME}/suppressions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ suppressions: suppressions })
+  }).then(res => {
+    if (res.ok) {
+      console.log("Suppressions saved");
+    }
+  });
+}
+
+function renderView() {
+  if (viewMode === "grouped") {
+    renderGroupedView();
+  } else {
+    renderUngroupedView();
+  }
+}
+
+function renderUngroupedView() {
+  const container = document.getElementById("pos-groups-container");
+  container.innerHTML = "";
+  
+  // Flatten all lemmas into single array
+  const allLemmas = [];
+  Object.keys(posGroupsData).forEach(pos => {
+    posGroupsData[pos].forEach(item => {
+      allLemmas.push({
+        ...item,
+        pos: pos
+      });
+    });
+  });
+  
+  // Sort by frequency descending
+  allLemmas.sort((a, b) => b.frequency - a.frequency);
+  
+  // Render as simple list
+  allLemmas.forEach(item => {
+    const lemmaDiv = document.createElement("div");
+    lemmaDiv.className = "lemma-item";
+    lemmaDiv.style.borderBottom = "1px solid #eee";
+    lemmaDiv.style.paddingTop = "8px";
+    lemmaDiv.style.paddingBottom = "8px";
+    
+    const lemmaCheckbox = document.createElement("input");
+    lemmaCheckbox.type = "checkbox";
+    lemmaCheckbox.id = `suppress-${item.lemma_key}`;
+    lemmaCheckbox.dataset.lemmaKey = item.lemma_key;
+    lemmaCheckbox.checked = suppressions.lemmas.includes(item.lemma_key);
+    
+    const lemmaLabel = document.createElement("label");
+    lemmaLabel.htmlFor = `suppress-${item.lemma_key}`;
+    lemmaLabel.innerHTML = `${item.lemma} <span class="pos-tag">(${item.pos})</span>`;
+    
+    const freq = document.createElement("span");
+    freq.className = "frequency";
+    freq.textContent = item.frequency;
+    
+    lemmaDiv.appendChild(lemmaCheckbox);
+    lemmaDiv.appendChild(lemmaLabel);
+    lemmaDiv.appendChild(freq);
+    container.appendChild(lemmaDiv);
+    
+    // Individual lemma checkbox handler
+    lemmaCheckbox.addEventListener("change", () => {
+      if (lemmaCheckbox.checked) {
+        if (!suppressions.lemmas.includes(item.lemma_key)) {
+          suppressions.lemmas.push(item.lemma_key);
+        }
+      } else {
+        suppressions.lemmas = suppressions.lemmas.filter(k => k !== item.lemma_key);
+      }
+      saveSuppressions();
+    });
+  });
+}
+
+function renderGroupedView() {
+  const container = document.getElementById("pos-groups-container");
+  container.innerHTML = "";
+  
+  // Sort POS groups alphabetically
+  const sortedPOS = Object.keys(posGroupsData).sort();
+  
+  sortedPOS.forEach(pos => {
+    const lemmas = posGroupsData[pos];
+    const totalFreq = lemmas.reduce((sum, item) => sum + item.frequency, 0);
+    
+    const groupDiv = document.createElement("div");
+    groupDiv.className = "pos-group";
+    
+    const header = document.createElement("div");
+    header.className = "pos-header";
+    
+    const posCheckbox = document.createElement("input");
+    posCheckbox.type = "checkbox";
+    posCheckbox.id = `suppress-pos-${pos}`;
+    posCheckbox.dataset.pos = pos;
+    posCheckbox.checked = suppressions.pos.includes(pos);
+    
+    const posLabel = document.createElement("label");
+    posLabel.htmlFor = `suppress-pos-${pos}`;
+    posLabel.textContent = `Suppress all (${lemmas.length} lemmas, ${totalFreq} occurrences)`;
+    posLabel.className = "suppress-all";
+    
+    const arrow = document.createElement("span");
+    arrow.textContent = `▶ ${pos}`;
+    
+    header.appendChild(arrow);
+    header.appendChild(document.createTextNode(" "));
+    header.appendChild(posCheckbox);
+    header.appendChild(document.createTextNode(" "));
+    header.appendChild(posLabel);
+    
+    const content = document.createElement("div");
+    content.className = "pos-content";
+    content.id = `pos-content-${pos}`;
+    
+    lemmas.forEach(item => {
+      const lemmaDiv = document.createElement("div");
+      lemmaDiv.className = "lemma-item";
+      
+      const lemmaCheckbox = document.createElement("input");
+      lemmaCheckbox.type = "checkbox";
+      lemmaCheckbox.id = `suppress-${item.lemma_key}`;
+      lemmaCheckbox.dataset.lemmaKey = item.lemma_key;
+      lemmaCheckbox.checked = suppressions.lemmas.includes(item.lemma_key);
+      
+      const lemmaLabel = document.createElement("label");
+      lemmaLabel.htmlFor = `suppress-${item.lemma_key}`;
+      lemmaLabel.textContent = item.lemma;
+      
+      const freq = document.createElement("span");
+      freq.className = "frequency";
+      freq.textContent = item.frequency;
+      
+      lemmaDiv.appendChild(lemmaCheckbox);
+      lemmaDiv.appendChild(lemmaLabel);
+      lemmaDiv.appendChild(freq);
+      content.appendChild(lemmaDiv);
+      
+      // Individual lemma checkbox handler
+      lemmaCheckbox.addEventListener("change", () => {
+        if (lemmaCheckbox.checked) {
+          if (!suppressions.lemmas.includes(item.lemma_key)) {
+            suppressions.lemmas.push(item.lemma_key);
+          }
+        } else {
+          suppressions.lemmas = suppressions.lemmas.filter(k => k !== item.lemma_key);
+        }
+        saveSuppressions();
+      });
+    });
+    
+    groupDiv.appendChild(header);
+    groupDiv.appendChild(content);
+    container.appendChild(groupDiv);
+    
+    // POS checkbox handler
+    posCheckbox.addEventListener("change", (e) => {
+      e.stopPropagation();
+      if (posCheckbox.checked) {
+        if (!suppressions.pos.includes(pos)) {
+          suppressions.pos.push(pos);
+        }
+      } else {
+        suppressions.pos = suppressions.pos.filter(p => p !== pos);
+      }
+      saveSuppressions();
+    });
+    
+    // Toggle expand/collapse
+    header.addEventListener("click", (e) => {
+      if (e.target.type === "checkbox" || e.target.tagName === "LABEL") return;
+      content.classList.toggle("expanded");
+      arrow.textContent = content.classList.contains("expanded") 
+        ? `▼ ${pos}` 
+        : `▶ ${pos}`;
+    });
+  });
+}
+</script>
+
+</body>
+</html>
